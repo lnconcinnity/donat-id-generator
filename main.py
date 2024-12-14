@@ -1,7 +1,5 @@
 
-import os
-import dotenv
-import time
+import os, platform, dotenv, time, traceback
 import qrcode
 
 from io import BytesIO
@@ -17,6 +15,10 @@ DEBUG_MODE = True
 MINIMUM_MAX_RANGE_TO_LAZY_ESTIMATE_FONT_SIZE = 10
 LAZY_ESTIMATE_FONT_SIZE = False
 STUDENT_ID_PREFIX = "2000"
+BACK_DRAW_OPTIONS = {
+    "student_id_position": (240, 304),
+    "facebook_group_position": (377, 848),
+}
 FRONT_DRAW_OPTIONS = {
     # ( position(x, y), font_size, font_style )
     "student_id_options": [ (200, 860), 30, "fonts/comic_sans_bold.ttf" ],
@@ -75,23 +77,29 @@ def write_qr_code(text, box_size=20, version=1):
 			left_color=(204, 121, 255)
 		)
     )
-    
-    # save it temporarily, i dont want 1000 qr codes unneccessarily saved ToT
-    with BytesIO() as bytes:
-        qr_img.save(bytes, 'png')
-        bytes.seek(0)
-        image = Image.open(bytes).convert('RGBA')
+    image = qr_img.convert('RGBA')
     return image
         
 
-def paste_image_to(src, dst, pos):
+def paste_image_to(src, dst: Image.Image, pos):
     dst.paste(src, pos)
-    
+
+def get_action():
+    action = int(input("To continue, kindly specify what action you'd be performing (input as the number):\n1. Print all (Will take some time)\n2. Print specified no.# of rows\n"))
+    if action not in [1, 2]: # add how many options there are
+        print("Invalid action; this action does not exist.")
+        return get_action()
+    return action
+
 def get_range():
-    range_min = int(input("min_range: "))
-    range_max = int(input("max_range: "))
-    if range_min < 2 or range_max < range_min:
-        print("Invalid range; Ensure min_range is greater than two (2) and max_range is greater than min_range.")
+    try:
+        range_min = int(input("Starting Row: "))
+        range_max = int(input("Ending Row: "))
+        if range_min < 2 or range_max < range_min:
+            print("Invalid range; Ensure min_range is greater than two (2) and max_range is greater than min_range.")
+            return get_range()
+    except ValueError:
+        print("Invalid input; please enter numerical values.")
         return get_range()
     return range_min, range_max
 
@@ -140,18 +148,18 @@ def print_main(sheet):
         with Image.open(front_template) as image:
             draw = ImageDraw.Draw(image)
             image_width, _ = image.size
-            # student id
-            draw_text(draw, id, FRONT_DRAW_OPTIONS["student_id_options"][0], "white", FRONT_DRAW_OPTIONS["student_id_options"][1], image_width, 0, "center", FRONT_DRAW_OPTIONS["student_id_options"][2])
-            # alias
-            draw_text(draw, surname.upper(), FRONT_DRAW_OPTIONS["student_surname_options"][0], "white", FRONT_DRAW_OPTIONS["student_surname_options"][1], image_width, 0, "center", FRONT_DRAW_OPTIONS["student_surname_options"][2])
-            draw_text(draw, alias.upper(), FRONT_DRAW_OPTIONS["student_alias_options"][0], "white", FRONT_DRAW_OPTIONS["student_alias_options"][1], image_width, 0, "center", FRONT_DRAW_OPTIONS["student_alias_options"][2])
+            ls = [ (id, "student_id_options"), (surname.upper(), "student_surname_options"), (alias.upper(), "student_alias_options") ]
+            for content in ls:
+                text, options = content
+                context = FRONT_DRAW_OPTIONS[options]
+                draw_text(draw, text, context[0], "white", context[1], image_width, 0, "center", context[2])
             
             image.save(f'{cur_dir}/front.{front_extension}')
         # draw back
         back_template, back_extension = get_template("back", privilege=privilege, extension="png")
         with Image.open(back_template) as image:
-            paste_image_to(write_qr_code(id), image, (240, 304))
-            paste_image_to(DONAT_QR_CODE, image, (377, 848))
+            paste_image_to(write_qr_code(id), image, BACK_DRAW_OPTIONS["student_id_position"])
+            paste_image_to(DONAT_QR_CODE, image, BACK_DRAW_OPTIONS["facebook_group_position"])
             image.save(f'{cur_dir}/back.{back_extension}')
 
 def main():
@@ -163,13 +171,22 @@ def main():
     spreadsheet_id = ""
     with open(os.getenv("GOOGLE_SPREADSHEET_ID"), 'r') as text:
         spreadsheet_id = text.readline()
-    print("Specify range (min_range and max_range)")
-    range_min, range_max = get_range()
-    range_value = f'master!A{range_min}:D{range_max}'
-    print(f'Current range to assess: {range_value}')
-    if range_max > MINIMUM_MAX_RANGE_TO_LAZY_ESTIMATE_FONT_SIZE:
-        global LAZY_ESTIMATE_FONT_SIZE
-        LAZY_ESTIMATE_FONT_SIZE = True
+    
+    # simple menu (probably)
+    os.system('cls' if platform.system() == "Windows" else 'clear')
+    print("Hello! You are currently attempting to print out current DONAT members' ids.\n\n")
+    action = get_action()
+    range_value = None
+    if action == 1: # print all
+        range_value = "master!A2:D"
+    elif action == 2: # print specified
+        print("Kindly specify starting and ending rows, ensure that ending row's input is higher that of starting row's.")
+        range_min, range_max = get_range()
+        range_value = f'master!A{range_min}:D{range_max}'
+        if range_max > MINIMUM_MAX_RANGE_TO_LAZY_ESTIMATE_FONT_SIZE:
+            global LAZY_ESTIMATE_FONT_SIZE
+            LAZY_ESTIMATE_FONT_SIZE = True
+    print(f'Current rows to print: {range_value}.\nPlease wait...')
 
     global DONAT_QR_CODE
     DONAT_QR_CODE = write_qr_code("https://www.facebook.com/OrCaDONAT/", 5, 2)
@@ -182,7 +199,7 @@ def main():
         values = result.get('values', [])
         if values:
             start_time = time.time()
-            print(f'Retrieved data from spreadsheet, printing IDs for students no.{range_min} to no.{range_max}')
+            print(f'Retrieved data from spreadsheet. Commencing...')
             print_main(values)
             elapsed_time = time.time() - start_time
             print(f'Printing completed, time took: {elapsed_time}s')
@@ -190,6 +207,7 @@ def main():
             print("No data found.")
     except Exception as e:
         print(f'An error occured!\n{e}')
+        traceback.print_exc()
     
 if __name__ == "__main__":
     main()
