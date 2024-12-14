@@ -21,10 +21,11 @@ FRONT_DRAW_OPTIONS = {
     # ( position(x, y), font_size, font_style )
     "student_id_options": [ (200, 860), 30, "fonts/comic_sans_bold.ttf" ],
     "student_surname_options": [ (200, 940), 80, "fonts/arial_bold.ttf" ],
-    "student_alias_options": [ (200, 1010), 70, "fonts/arial_italic.ttf" ],
+    "student_alias_options": [ (200, 1010), 70, "fonts/arial_narrow_italic.ttf" ],
 }
 OUT_DIR = 'out/'
 TEMPLATES_DIR = 'templates/'
+DONAT_QR_CODE = None
 
 def print_debug(log):
     if DEBUG_MODE: print(log)
@@ -94,7 +95,6 @@ def get_range():
         return get_range()
     return range_min, range_max
 
-DONAT_QR_CODE = write_qr_code("https://www.facebook.com/OrCaDONAT/", 5, 2)
 def print_main(sheet):
     index = 0
     for row in sheet:
@@ -170,6 +170,11 @@ def main():
     if range_max > MINIMUM_MAX_RANGE_TO_LAZY_ESTIMATE_FONT_SIZE:
         global LAZY_ESTIMATE_FONT_SIZE
         LAZY_ESTIMATE_FONT_SIZE = True
+
+    global DONAT_QR_CODE
+    DONAT_QR_CODE = write_qr_code("https://www.facebook.com/OrCaDONAT/", 5, 2)
+    if not os.path.exists("out"):
+        Path('out').mkdir(parents=True, exist_ok=True)
 
     try:
         sheet = service.spreadsheets()
